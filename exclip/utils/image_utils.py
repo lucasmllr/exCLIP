@@ -1,9 +1,5 @@
-import math
 from typing import Tuple
-
-import torch
 from PIL import Image
-from torch import Tensor
 from torchvision.transforms.functional import center_crop, resize
 
 
