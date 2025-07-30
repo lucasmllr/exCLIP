@@ -17,3 +17,11 @@ This is demonstrated in the follwing plot.
 In the top row, we select spans in captions (yellow) and see what they correspond to in the image above. In the bottom row, we select bounding-boxes in the image (yellow) and see what they correspond to in the caption below. Heatmaps in both images and captions are red for positive and blue for negative values.
 
 For all details, check out the paper!
+
+## Installation
+
+To use our `exclip` package, clone this repository, create a fresh python environment (3.11 or higher) and run the following command inside the cloned repo.
+
+```
+$ pip install .
+```

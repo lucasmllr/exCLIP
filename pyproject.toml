@@ -1,0 +1,42 @@
+# pyproject.toml
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["exclip"]
+
+[project]
+name = "exclip"
+authors = [
+  {name = "Lucas Moeller", email = "lucasmoeller@icloud.com"},
+  {name = "Pascal Tilli", email = "pascal.tilli@ims.uni-stuttgart"}
+]
+version = "1.0"
+description = "A wrapper package for CLIP, providing explanations for how the model compares images and captions."
+readme = "README.md"
+requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "numpy",
+    "torch",
+    "torchvision",
+    "tqdm",
+    "matplotlib",    
+    "pillow",
+    "opencv-python",
+    "ftfy",
+    "regex",
+    "ipykernel",
+    "open_clip_torch",
+    "clip @ git+https://github.com/openai/CLIP.git"
+]
+
+[project.urls]
+Homepage = "https://github.com/lucasmllr/exCLIP"
+"Bug Tracker" = "https://github.com/lucasmllr/exCLIP/issues"
