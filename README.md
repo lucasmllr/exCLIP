@@ -58,4 +58,4 @@ img_inpt = prep(image).unsqueeze(0).to(device)
 interactions = explainer.explain(txt_inpt, img_inpt)
 ```
 
-This code is also included `minimal_example.py`. The `demo.ipynb` notebook includes more details and also show how to visualize the resulting explanations.
+This code is also included in `minimal_example.py`. The `demo.ipynb` notebook includes more details and also shows how to visualize the resulting explanations.
