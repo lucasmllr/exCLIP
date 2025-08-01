@@ -25,7 +25,7 @@ class HNCDataset(torch.utils.data.Dataset):
         # list all assert statements here
         self.name = "HNCDataset"
         self.return_bbox = return_bbox
-        logger = logging.getLogger("xclip")
+        logger = logging.getLogger("exclip")
         assert split in [
             "train",
             "valid",

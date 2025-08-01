@@ -9,24 +9,37 @@ from .hnc import HNCDataset, hnc_collate_fn
 
 
 def build_datasets(cfg, args, demo=False):
-    logger = logging.getLogger("xclip")
+    """
+    Builds and returns dataloaders for the specified dataset.
+
+    Depending on the configuration, this function initializes datasets and dataloaders
+    for training, validation, and testing splits for one of the supported datasets:
+    HNC, COCO, or Flickr30k. It also sets up appropriate samplers and collate functions,
+    and supports distributed training and demo mode.
+
+    Args:
+        cfg: Configuration object containing dataset and training parameters.
+        args: Arguments object with runtime options (e.g., batch size, num_workers, distributed).
+        demo (bool, optional): If True, disables training dataloader creation. Defaults to False.
+    """
+    logger = logging.getLogger("exclip")
     logger.info("build datasets")
     match cfg.training.dataset:
         case "hnc":
             start_time = time.time()
             dataset_train = (
-                HNCDataset(args=args, cfg=cfg, split="train") if not demo else None
+                HNCDataset(cfg=cfg, split="train") if not demo else None
             )
             logger.info(
                 f"{(time.time() - start_time):.2f}s elapsed to load the train dataset"
             )
             start_time = time.time()
-            dataset_valid = HNCDataset(args=args, cfg=cfg, split="valid")
+            dataset_valid = HNCDataset(cfg=cfg, split="valid")
             logger.info(
                 f"{(time.time() - start_time):.2f}s elapsed to load the train dataset"
             )
             start_time = time.time()
-            dataset_test = HNCDataset(args=args, cfg=cfg, split="test")
+            dataset_test = HNCDataset(cfg=cfg, split="test")
             logger.info(
                 f"{(time.time() - start_time):.2f}s elapsed to load the train dataset"
             )

@@ -51,7 +51,7 @@ def train_epoch(
     Returns:
         None
     """
-    logger = logging.getLogger("xclip")
+    logger = logging.getLogger("exclip")
 
     params_inital = list(model_inital.parameters())
     params = list(model.parameters())

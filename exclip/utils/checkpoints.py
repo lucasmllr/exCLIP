@@ -29,7 +29,7 @@ def load_checkpoint(args, model, optimizer, lr_scheduler) -> None:
         - Information about which checkpoint is loaded, or if no checkpoint is found.
         - Confirmation of loading model, optimizer, and lr_scheduler states.
     """
-    logger = logging.getLogger("xclip")
+    logger = logging.getLogger("exclip")
     ckpt_top_res = os.path.join(args.output_dir, "checkpoint_top_result.pt")
     ckpt = os.path.join(args.output_dir, "checkpoint.pt")
     if os.path.isfile(args.ckpt_path):

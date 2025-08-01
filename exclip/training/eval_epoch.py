@@ -43,7 +43,7 @@ def eval_epoch(
     metric_itm = MeanMetric().to(device=device)
     metric_row_acc = MeanMetric().to(device=device)
     metric_column_acc = MeanMetric().to(device=device)
-    logger = logging.getLogger("xclip")
+    logger = logging.getLogger("exclip")
     logger.info(f"[{epoch}] | begin {split} validation")
 
     params_inital = list(model_inital.parameters())

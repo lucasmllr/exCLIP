@@ -39,7 +39,7 @@ def train(
     Returns:
         None
     """
-    logger = logging.getLogger("xclip")
+    logger = logging.getLogger("exclip")
     logger.info("begin training")
 
     lr_scheduler(None)
