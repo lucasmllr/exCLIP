@@ -7,8 +7,61 @@ import torch.nn as nn
 from torch import Tensor
 from tqdm import tqdm
 
-from .models.hooks import interpolation_hook, permuting_interpolation_hook
 
+# hooks for the computation of interpolations
+
+def interpolate_reference_embedding(e: Tensor, interpolations: Union[int, Tensor]):
+    """Linearly interpolates N steps between the instance at index=1 and the reference at index=2.
+    The batch must consist only of instance and reference."""
+    if e.shape[0] != 2:
+        breakpoint()
+    assert e.shape[0] == 2
+    d = len(e.shape)
+    device = e.device
+    dtype = e.dtype
+    if isinstance(interpolations, int):
+        assert interpolations > 0
+        s = 1 / interpolations
+        a = torch.arange(1, 0, -s, dtype=dtype).to(device)
+    elif isinstance(interpolations, Tensor):
+        assert len(interpolations.shape) == 1
+        a = interpolations.clone().type(dtype).to(device)
+    else:
+        raise TypeError(
+            f"interpolations must be int or tensor, got {type(interpolations)}"
+        )
+    x, r = e[0].unsqueeze(0), e[-1].unsqueeze(0)
+    for _ in range(d - 1):  # same dims as e
+        a.unsqueeze_(1)
+    g = r + a * (x - r)
+    g = torch.cat([g, r])
+    return g
+
+
+def interpolation_hook(interpolations: Union[int, Tensor], cache: list):
+    def hook(model, inpt):
+        g = interpolate_reference_embedding(inpt[0], interpolations)
+        cache.append(g)
+        return (g,) + inpt[1:]
+
+    return hook
+
+
+def permuting_interpolation_hook(interpolations: Union[int, Tensor], cache: list):
+    def hook(model, inpt):
+        e = inpt[0]
+        # batch shape: from (S, B, D) to (B, S, D)
+        e = e.permute(1, 0, 2)
+        g = interpolate_reference_embedding(e, interpolations)
+        cache.append(g)
+        # back to batch shape (S, B, D)
+        g = g.permute(1, 0, 2)
+        return (g,) + inpt[1:]
+
+    return hook
+
+
+# abstract explainer class
 
 class Explainer(nn.Module):
     def __init__(
@@ -20,7 +73,6 @@ class Explainer(nn.Module):
         norm_embeddings: bool = True,  # whether to normalize embeddings to unit length
         scale_cos: bool = False,  # whether to scale cos similarities by a factor of exp(logit_scale)
         device: torch.device = torch.device("cuda:0"),
-        itm: bool = False,
         img_ref_type: str = 'zeros'
     ):
         super().__init__()
@@ -37,21 +89,13 @@ class Explainer(nn.Module):
         self.attribute = False  # wheather to adjust forward pass for attributions, False for training, if True batch size must be one
         self.counter_powers_of_two = 0
         self.lowest_loss_eval = sys.maxsize
-        self.itm = itm
         # refs
         self.txt_ref = self._make_txt_ref()
         self.img_ref_type = img_ref_type
         self.img_ref = self._make_img_ref()
 
-        if self.itm:
-            # self.classifier_itm = torch.nn.Sequential(
-            #     torch.nn.Linear(1024, 512),
-            #     torch.nn.GELU(),
-            #     torch.nn.Linear(512, 2),
-            # )
-            self.classifier_itm = torch.nn.Linear(1, 2)
-
     def _make_txt_ref(self, text_seq_len=None):
+        '''Creates the text reference.'''
         # clip tokenization uses zero for padding
         if text_seq_len == None:
             text_seq_len = self.text_seq_len
@@ -61,52 +105,27 @@ class Explainer(nn.Module):
         return r.long()
 
     def _make_img_ref(self):
+        '''Creates the image reference.'''
         if self.img_ref_type == 'zeros':
             ref = torch.zeros([1, 3, self.image_dim, self.image_dim])
         elif self.img_ref_type == 'normal':
             ref = torch.randn([1, 3, self.image_dim, self.image_dim])
         return ref
 
-    def legacy_encode_text(self, text: torch.tensor):
-        """mostly copied from CLIP.encode_image(), extended by ref shift and attribute option"""
-        assert (len(text.shape) == 2), f"expected text to be a (B, S) tensor, but got {text.shape}"
-        text = torch.cat(
-            [text, self._make_txt_ref(text_seq_len=text.size(1)).to(self.device)]
-        )
-        x = self.model.token_embedding(text)  #.type(self.model.dtype)
-        # [batch_size, n_ctx, d_model]
-        x = x + self.model.positional_embedding  #.type(self.model.dtype)
-        x = x.permute(1, 0, 2)  # NLD -> LND
-        x = self.model.transformer(x)
-        x = x.permute(1, 0, 2)  # LND -> NLD
-        x = self.model.ln_final(x)  #.type(self.model.dtype)
-        # x.shape = [batch_size, n_ctx, transformer.width]
-        # take features from the eot embedding (eot_token is the highest number in each sequence)
-        if self.attribute:  # expand eot idxs to the number of interpolations in the batch
-            txt_eot_idx = text[0].argmax(dim=-1)
-            ref_eot_idx = text[1].argmax(dim=-1)
-            N = x.shape[0] - 1
-            eot_idxs = torch.tensor([txt_eot_idx] * N + [ref_eot_idx])
-            x = x[torch.arange(x.shape[0]), eot_idxs]
-        else:
-            x = x[torch.arange(x.shape[0]), text.argmax(dim=-1)]
-        x = x @ self.model.text_projection
-        return x[:-1], x[-1]
-
     def encode_text(self, text: torch.tensor):
-        '''due to different forward passes in the text encoder of OpenAI's and OpenCLIP's impoementation, 
+        '''due to different forward passes in the text encoders of OpenAI's and OpenCLIP's implementation, 
         this method must be implemented in subclasses.'''
         raise NotImplementedError('encode_text must be implemented in subclasses')
     
     def encode_image(self, image: torch.Tensor):
-        """adds ref shift to original method"""
+        '''adds the image reference to to original original batch which can be wrapped otherwise'''
         assert (len(image.shape) == 4), f"expected image to be (B, C, D, D) tensor, but got {image.shape}"
         image = torch.cat([image, self.img_ref.to(self.device)])
-        # CLIP's encode_image() can be used without adjustment
         x = self.model.encode_image(image)
         return x[:-1], x[-1]
 
     def logit_cos(self, e_a: torch.Tensor, e_b: torch.Tensor):
+        '''Computes cosine similarity between two embeddings, optionally scaled by a learned factor.'''
         if self.norm_emb:
             e_a = e_a / e_a.norm(dim=1, keepdim=True)
             e_b = e_b / e_b.norm(dim=1, keepdim=True)
@@ -120,25 +139,23 @@ class Explainer(nn.Module):
         return scores, scores.t()
 
     def forward(self, image: torch.Tensor, text: torch.Tensor):
+        '''Forward pass through the model, computing cosine similarity between image and text embeddings.'''
         img_emb, img_ref = self.encode_image(image)
         txt_emb, txt_ref = self.encode_text(text)
-        if self.itm:
-            scalars = self.logit_cos(img_emb, txt_emb)[0].diag().unsqueeze(1)
-            return self.classifier_itm(scalars)
-            # return self.classifier_itm(torch.cat((img_emb, txt_emb), dim=-1))
         return self.logit_cos(img_emb, txt_emb)
 
-    def init_image_attribution(
-        self, layer: int, N_interpolations: Union[int, torch.tensor]
-    ):
+    def init_image_attribution(self, layer: int, N_interpolations: Union[int, torch.tensor]):
+        '''Due to differences between OpenAI's and OpenCLIP's implementations, the initialization of the attribution
+        computation and the involved registration of hooks must be implemented separately in subclasses.'''
         raise NotImplementedError("init_image_attribution must be implemented in subclasses")
 
-    def init_text_attribution(
-        self, layer: int, N_interpolations: Union[int, torch.tensor]
-    ):
+    def init_text_attribution(self, layer: int, N_interpolations: Union[int, torch.tensor]):
+        '''Due to differences between OpenAI's and OpenCLIP's implementations, the initialization of the attribution
+        computation and the involved registration of hooks must be implemented separately in subclasses.'''
         raise NotImplementedError("init_text_attribution must be implemented in subclasses")
 
     def reset_attribution(self):
+        '''Resets the attribution computation by removing all hooks and clearing cached intermediate representations.'''
         self.attribute = False
         if hasattr(self, "txt_hook"):
             self.txt_hook.remove()
@@ -153,7 +170,7 @@ class Explainer(nn.Module):
         features: torch.tensor,  # intermediate / input features
         verbose: bool = True,
     ):
-        # TODO: include normalization here
+        '''Computes integrated Jacobian for the given embedding w.r.t features (cf. Equation 9 in the paper).'''
         N, D = embedding.shape
         grads = []
         retain_graph = True
@@ -178,6 +195,9 @@ class Explainer(nn.Module):
         compute_lhs_terms: bool = False,
         verbose: bool = False
     ):
+        '''Computes our second-order explanations for all token-patch interactions between the image and 
+        caption (cf. Equation 10 in the paper).'''
+        
         self.reset_attribution()
         self.init_text_attribution(layer=text_layer, N_interpolations=N)
         self.init_image_attribution(layer=image_layer, N_interpolations=N)
@@ -272,9 +292,13 @@ class Explainer(nn.Module):
             return A
 
 
+# OpenAi and OpenClip Explaners
+
 class OpenAIExplainer(Explainer):
 
     def init_image_attribution(self, layer: int, N_interpolations: Union[int, torch.tensor]):
+        '''Initializes the image attribution computation by registering a forward hook to a defined layer
+        that computes interpolations between the actual input image representation and the image referece.'''
         self.img_intermediates = []
         if hasattr(self.model.visual, "transformer"):  # ViT model
             assert layer < len(
@@ -297,6 +321,8 @@ class OpenAIExplainer(Explainer):
             )
 
     def init_text_attribution(self, layer: int, N_interpolations: Union[int, torch.tensor]):
+        '''Initializes the text attribution computation by registering a forward hook to a defined layer
+        that computes interpolations between the actual captio input and referece.'''
         assert layer < len(
             self.model.transformer.resblocks
         ), f"There is no layer {layer} in the text model."
@@ -311,7 +337,8 @@ class OpenAIExplainer(Explainer):
         )
 
     def encode_text(self, text):
-        """mostly copied from CLIP.encode_image(), but pooling needs to be adjusted to the number of interpolations N"""
+        """Forward pass through the text encoder.
+        Mostly copied from CLIP.encode_image(), but the eos pooling needs to be adjusted to the number of interpolations N"""
         # attaching reference to the batch
         text = torch.cat([text, self.txt_ref.to(self.device)])
         
@@ -339,9 +366,9 @@ class OpenAIExplainer(Explainer):
 
 class OpenClipExplainer(Explainer):
 
-    def init_image_attribution(
-        self, layer: int, N_interpolations: Union[int, torch.tensor]
-    ):
+    def init_image_attribution(self, layer: int, N_interpolations: Union[int, torch.tensor]):
+        '''Initializes the image attribution computation by registering a forward hook to a defined layer
+        that computes interpolations between the actual input image representation and the image referece.'''
         self.img_intermediates = []
         assert layer < len(self.model.visual.transformer.resblocks), f"There is no layer {layer} in the vision model."
         self.img_hook = self.model.visual.transformer.resblocks[
@@ -351,9 +378,9 @@ class OpenClipExplainer(Explainer):
                 )
             )
 
-    def init_text_attribution(
-        self, layer: int, N_interpolations: Union[int, torch.tensor]
-    ):
+    def init_text_attribution(self, layer: int, N_interpolations: Union[int, torch.tensor]):
+        '''Initializes the text attribution computation by registering a forward hook to a defined layer
+        that computes interpolations between the actual captio input and referece.'''
         assert layer < len(self.model.transformer.resblocks), f"There is no layer {layer} in the text model."
         self.txt_intermediates = []
         self.txt_hook = self.model.transformer.resblocks[layer].register_forward_pre_hook(
@@ -363,7 +390,9 @@ class OpenClipExplainer(Explainer):
         )
 
     def encode_text(self, text):
-        """mostly copied from CLIP.encode_image(), but pooling needs to be adjusted to the number of interpolations N"""
+        """Forward pass through the text encoder. Mostly copied from the OpenClip implementation, 
+        but the eos pooling needs to be adjusted to the number of interpolations N"""
+        
         # attaching reference to the batch
         text = torch.cat([text, self.txt_ref.to(self.device)])
         
@@ -390,57 +419,3 @@ class OpenClipExplainer(Explainer):
 
         return x[:-1], x[-1]
     
-    
-if __name__ == "__main__":
-
-    import clip
-    from PIL import Image
-    from .models.tokenization import ClipTokenizer
-
-    model_name = "ViT-B/16"
-    print("init model")
-    device = torch.device("cuda:3")
-    model, prep = clip.load(model_name, device=device)
-    xclip = Explainer(
-        model,
-        device=device,
-        img_ref_type='normal',
-        text_ref_len=0
-    )
-    tokenizer = ClipTokenizer()
-
-    print("prep input")
-    image = prep(Image.open("examples/dogs.jpg")).unsqueeze(0).to(device)
-    caption = tokenizer.tokenize('Two dogs running in the snow.').to(device)
-
-    clip_txt_emb = model.encode_text(caption)
-    clip_img_emb = model.encode_image(image)
-    clip_sim = torch.nn.functional.cosine_similarity(clip_img_emb, clip_txt_emb)
-
-    xclip_txt_emb = xclip.encode_text(caption)[0]
-    xclip_img_emb = xclip.encode_image(image)[0]
-    xclip_sim = torch.nn.functional.cosine_similarity(xclip_img_emb, xclip_txt_emb)
-
-    # A, s, rtxt, rimg, rr = xclip.explain(
-    #     text=caption,
-    #     image=image,
-    #     text_layer=11,
-    #     image_layer=11,
-    #     N=5,
-    #     clip_txt_padding=True,
-    #     compute_lhs_terms=True, 
-    #     verbose=True
-    # )
-
-    Ab, sb, rtxtb, rimgb, rrb = xclip.explain_no_batch(
-        text=caption,
-        image=image,
-        text_layer=11,
-        image_layer=11,
-        N=5,
-        cut_txt_padding=True,
-        compute_lhs_terms=True, 
-        verbose=True
-    )
-    
-    breakpoint()

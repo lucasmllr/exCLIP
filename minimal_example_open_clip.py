@@ -3,7 +3,7 @@ from PIL import Image
 import torch
 
 from exclip.explanation import OpenClipExplainer
-from exclip.models.tokenization import OpenClipTokenizer
+from exclip.tokenization import OpenClipTokenizer
 
 
 device = 'cuda:2'

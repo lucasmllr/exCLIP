@@ -1,10 +1,10 @@
 from clip.simple_tokenizer import SimpleTokenizer as ClipSimpleTokenizer
-from open_clip import SimpleTokenizer as OpenClipTokenizer
+import open_clip
 from typing import Union, List
 import torch
 
 
-class ClipTokenizer(ClipSimpleTokenizer):
+class OpenAITokenizer(ClipSimpleTokenizer):
 
     def get_token_ids(self, text: str, append_sot_eot: bool = False):
         token_ids = self.encode(text)
@@ -57,10 +57,11 @@ class ClipTokenizer(ClipSimpleTokenizer):
         return result
 
 
-class OpenClipTokenizerWrapper:
+class OpenClipTokenizer:
+    # TODO: subclass open clip SimpleTokenizer
 
-    def __init__(self, tokenizer: OpenClipTokenizer):
-        self.tokenizer = tokenizer
+    def __init__(self, model_name: str):
+        self.tokenizer = open_clip.get_tokenizer(model_name)
 
     def __call__(self, *args, **kwargs):
         return self.tokenizer(*args, **kwargs)

@@ -1,7 +1,7 @@
 import clip
 from PIL import Image
 from exclip.explanation import OpenAIExplainer
-from exclip.models.tokenization import OpenAITokenizer
+from exclip.tokenization import OpenAITokenizer
 
 device = 'cuda:1'
 model, prep = clip.load('ViT-B/16', device=device)
