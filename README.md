@@ -1,8 +1,6 @@
 # exCLIP
 This repository contains the code for the **TMLR'25** paper [*Explaining Caption-Image Interactions in CLIP Models with Second-Order Attributions*](https://openreview.net/forum?id=HUUL19U7HP).
 
-A demo is alreay included in the `demo.ipynb` notebook.
-
 We are still working on cleaning up the code to make it easily accessible and will be updating this repo over the next couple of days.
 To stay tuned, we would be glad if you leave a star! 🤩
 
@@ -20,7 +18,7 @@ For all details, check out the paper!
 
 ## Installation
 
-To use our `exclip` package, simply install it with:
+To use our `exclip` package, simply install it with (The pip version is currently behind, will be updated soon):
 ```bash
 $ pip install exclip
 ```
@@ -34,7 +32,7 @@ Alternatively, you can directly install this repository:
 $ pip install git+https://github.com/lucasmllr/exCLIP
 ```
 or clone it and run `$ pip install .` inside the cloned directory.
-The latter two version already include the clip installation, too.
+The latter two versions already include the clip installation, too.
 
 ## Getting started
 The following minimal example initializes a clip model, wraps it into our Explainer and computes interaction explanations for a given image-caption pair.
@@ -58,4 +56,6 @@ img_inpt = prep(image).unsqueeze(0).to(device)
 interactions = explainer.explain(txt_inpt, img_inpt)
 ```
 
-This code is also included in `minimal_example.py`. The `demo.ipynb` notebook includes more details and also shows how to visualize the resulting explanations.
+This example is also inclued in `minimal_example_openai.py` and `minimap_example_open_clip.py` contains an equivalent for an OpenClip model. 
+
+The `demo.ipynb` notebook also shows how to visualize the resulting explanations for different token ranges in the caption.
