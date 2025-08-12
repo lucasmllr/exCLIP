@@ -18,7 +18,7 @@ For all details, check out the paper!
 
 ## Installation
 
-To use our `exclip` package, simply install it with (The pip version is currently behind, will be updated soon):
+To use our `exclip` package, simply install it with:
 ```bash
 $ pip install exclip
 ```
