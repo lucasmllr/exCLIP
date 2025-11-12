@@ -41,7 +41,8 @@ The following minimal example initializes a clip model, wraps it into our Explai
 ```python
 import clip
 from PIL import Image
-from exclip import OpenAIExplainer, OpenAITokenizer
+from exclip import OpenAIExplainer
+from exclip.tokenization import OpenAITokenizer
 
 device = 'cuda:1'
 model, prep = clip.load('ViT-B/16', device=device)
